@@ -6,45 +6,169 @@ SQLite Database
 import sqlite3
 from pathlib import Path
 
-
 DB_FILE = Path("database/qphotocleaner.db")
 
 
-def create_database():
+class Database:
 
-    DB_FILE.parent.mkdir(exist_ok=True)
+    def __init__(self):
 
-    conn = sqlite3.connect(DB_FILE)
+        DB_FILE.parent.mkdir(exist_ok=True)
 
-    cur = conn.cursor()
+        self.conn = sqlite3.connect(DB_FILE)
+        self.conn.row_factory = sqlite3.Row
+        self.cur = self.conn.cursor()
 
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS files(
+    def create(self):
 
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        self.cur.execute("""
+        CREATE TABLE IF NOT EXISTS files(
 
-        path TEXT UNIQUE,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-        filename TEXT,
+            path TEXT UNIQUE,
+            filename TEXT,
+            extension TEXT,
+            size INTEGER,
+            modified REAL,
+            media_type TEXT,
 
-        extension TEXT,
+            sha256 TEXT,
 
-        size INTEGER,
+            duplicate INTEGER DEFAULT 0
 
-        modified REAL,
+        )
+        """)
 
-        media_type TEXT,
+        self.conn.commit()
 
-        sha256 TEXT
+    def clear(self):
 
-    )
-    """)
+        self.cur.execute("DELETE FROM files")
+        self.conn.commit()
 
-    conn.commit()
+    def insert(self, file):
 
-    conn.close()
+        self.cur.execute("""
 
+        INSERT OR REPLACE INTO files(
 
-def get_connection():
+            path,
+            filename,
+            extension,
+            size,
+            modified,
+            media_type,
+            sha256
 
-    return sqlite3.connect(DB_FILE)
+        )
+
+        VALUES(?,?,?,?,?,?,?)
+
+        """,
+
+        (
+
+            file["path"],
+            file["filename"],
+            file["extension"],
+            file["size"],
+            file["modified"],
+            file["media_type"],
+            None
+
+        ))
+
+    def commit(self):
+
+        self.conn.commit()
+
+    def count(self):
+
+        self.cur.execute("SELECT COUNT(*) FROM files")
+        return self.cur.fetchone()[0]
+
+    def get_duplicate_size_candidates(self):
+        """
+        サイズが重複しているファイルを取得
+        """
+
+        self.cur.execute("""
+
+            SELECT *
+
+            FROM files
+
+            WHERE size IN (
+
+                SELECT size
+
+                FROM files
+
+                GROUP BY size
+
+                HAVING COUNT(*) > 1
+
+            )
+
+            ORDER BY size
+
+        """)
+
+        return self.cur.fetchall()
+
+    def update_sha256(self, file_id, sha256):
+        """
+        SHA-256を書き込む
+        """
+
+        self.cur.execute(
+
+            """
+
+            UPDATE files
+
+            SET sha256=?
+
+            WHERE id=?
+
+            """,
+
+            (sha256, file_id)
+
+        )
+
+    def get_duplicate_hashes(self):
+        """
+        SHA-256が一致したファイルを取得
+        """
+
+        self.cur.execute("""
+
+            SELECT *
+
+            FROM files
+
+            WHERE sha256 IN (
+
+                SELECT sha256
+
+                FROM files
+
+                WHERE sha256 IS NOT NULL
+
+                GROUP BY sha256
+
+                HAVING COUNT(*) > 1
+
+            )
+
+            ORDER BY sha256
+
+        """)
+
+        return self.cur.fetchall()
+
+    def close(self):
+
+        self.conn.close()

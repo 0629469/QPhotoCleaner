@@ -1,20 +1,20 @@
 """
 QPhotoCleaner
+Main Program
+GUI Version
 """
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
 from scanner import scan_folder
-from database import create_database
+from database import Database
 
 
 def main():
 
     root = tk.Tk()
     root.withdraw()
-
-    create_database()
 
     folder = filedialog.askdirectory(
         title="スキャンするフォルダーを選択してください"
@@ -23,20 +23,39 @@ def main():
     if not folder:
         return
 
+    db = Database()
+
+    db.create()
+
+    db.clear()
+
     files = scan_folder(folder)
+
+    for file in files:
+        db.insert(file)
+
+    db.commit()
+
+    # calculate_hashes(db)
+
+    count = db.count()
+
+    db.close()
 
     images = sum(1 for f in files if f["media_type"] == "image")
     videos = sum(1 for f in files if f["media_type"] == "video")
 
     messagebox.showinfo(
 
-        "結果",
+        "QPhotoCleaner",
 
-        f"画像 {images}枚\n"
+        f"""スキャン完了
 
-        f"動画 {videos}本\n\n"
+画像 : {images}
 
-        f"SQLiteデータベースを作成しました。"
+動画 : {videos}
+
+SQLite登録 : {count} 件"""
 
     )
 
