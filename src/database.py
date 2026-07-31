@@ -169,6 +169,26 @@ class Database:
 
         return self.cur.fetchall()
 
+    
+    def mark_duplicates(self):
+        self.cur.execute("UPDATE files SET duplicate=0")
+        self.cur.execute("""
+            SELECT sha256 FROM files
+            WHERE sha256 IS NOT NULL
+            GROUP BY sha256
+            HAVING COUNT(*)>1
+            ORDER BY sha256
+        """)
+        rows=self.cur.fetchall()
+        group_no=1
+        for row in rows:
+            self.cur.execute(
+                "UPDATE files SET duplicate=? WHERE sha256=?",
+                (group_no,row["sha256"])
+            )
+            group_no+=1
+        self.conn.commit()
+
     def close(self):
 
         self.conn.close()
