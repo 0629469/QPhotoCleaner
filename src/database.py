@@ -11,7 +11,6 @@ DB_FILE = Path("database/qphotocleaner.db")
 
 class Database:
 
-
     def __init__(self):
 
         DB_FILE.parent.mkdir(exist_ok=True)
@@ -87,11 +86,12 @@ class Database:
     def count(self):
 
         self.cur.execute("SELECT COUNT(*) FROM files")
+
         return self.cur.fetchone()[0]
 
     def get_duplicate_size_candidates(self):
         """
-        サイズが重複しているファイルを取得
+        サイズが重複しているファイルだけ取得
         """
 
         self.cur.execute("""
@@ -112,7 +112,7 @@ class Database:
 
             )
 
-            ORDER BY size
+            ORDER BY size, filename
 
         """)
 
@@ -141,7 +141,7 @@ class Database:
 
     def get_duplicate_hashes(self):
         """
-        SHA-256が一致したファイルを取得
+        SHA-256一致ファイル取得
         """
 
         self.cur.execute("""
@@ -164,7 +164,7 @@ class Database:
 
             )
 
-            ORDER BY sha256, filename
+            ORDER BY duplicate, filename
 
         """)
 
@@ -221,8 +221,7 @@ class Database:
 
     def get_duplicate_groups(self):
         """
-        GUI表示用
-        duplicate番号順に取得
+        GUI用
         """
 
         self.cur.execute("""
@@ -238,6 +237,23 @@ class Database:
         """)
 
         return self.cur.fetchall()
+
+    def get_group_count(self):
+        """
+        重複グループ数
+        """
+
+        self.cur.execute("""
+
+            SELECT COUNT(DISTINCT duplicate)
+
+            FROM files
+
+            WHERE duplicate > 0
+
+        """)
+
+        return self.cur.fetchone()[0]
 
     def close(self):
 
