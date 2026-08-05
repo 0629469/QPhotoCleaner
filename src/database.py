@@ -163,31 +163,80 @@ class Database:
 
             )
 
-            ORDER BY sha256
+            ORDER BY sha256, filename
 
         """)
 
         return self.cur.fetchall()
 
-    
     def mark_duplicates(self):
+        """
+        duplicate列へグループ番号を書き込む
+        """
+
         self.cur.execute("UPDATE files SET duplicate=0")
+
         self.cur.execute("""
-            SELECT sha256 FROM files
+
+            SELECT sha256
+
+            FROM files
+
             WHERE sha256 IS NOT NULL
+
             GROUP BY sha256
-            HAVING COUNT(*)>1
+
+            HAVING COUNT(*) > 1
+
             ORDER BY sha256
+
         """)
-        rows=self.cur.fetchall()
-        group_no=1
+
+        rows = self.cur.fetchall()
+
+        group_no = 1
+
         for row in rows:
+
             self.cur.execute(
-                "UPDATE files SET duplicate=? WHERE sha256=?",
-                (group_no,row["sha256"])
+
+                """
+
+                UPDATE files
+
+                SET duplicate=?
+
+                WHERE sha256=?
+
+                """,
+
+                (group_no, row["sha256"])
+
             )
-            group_no+=1
+
+            group_no += 1
+
         self.conn.commit()
+
+    def get_duplicate_groups(self):
+        """
+        GUI表示用
+        duplicate番号順に取得
+        """
+
+        self.cur.execute("""
+
+            SELECT *
+
+            FROM files
+
+            WHERE duplicate > 0
+
+            ORDER BY duplicate, filename
+
+        """)
+
+        return self.cur.fetchall()
 
     def close(self):
 
