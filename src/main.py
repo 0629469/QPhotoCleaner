@@ -1,16 +1,16 @@
 """
 QPhotoCleaner
 Main Program
-Version 1.0
+GUI Version
 """
 
 import tkinter as tk
 from tkinter import filedialog
-from tkinter import messagebox
 
 from scanner import scan_folder
 from database import Database
 from duplicate import DuplicateEngine
+from gui import ResultWindow
 
 
 def main():
@@ -26,7 +26,7 @@ def main():
         return
 
     print("=" * 60)
-    print("QPhotoCleaner Version 1.0")
+    print("QPhotoCleaner")
     print("=" * 60)
 
     print("スキャン中...")
@@ -46,14 +46,12 @@ def main():
     print(f"画像 : {image_count}")
     print(f"動画 : {video_count}")
 
-    print()
-
-    print("SQLite登録中...")
-
     db = Database()
 
     db.create()
     db.clear()
+
+    print("SQLite登録中...")
 
     for file in files:
         db.insert(file)
@@ -62,51 +60,34 @@ def main():
 
     print(f"SQLite登録 : {db.count()} 件")
 
-    print()
-
     print("SHA-256計算中...")
 
     engine = DuplicateEngine(db)
 
     engine.calculate_hashes()
 
-    duplicate_file_count = engine.show_duplicates()
+    duplicate_count = engine.show_duplicates()
 
-    duplicate_group_count = db.get_group_count()
+    group_count = db.get_group_count()
+
+    print(f"重複グループ : {group_count}")
+    print(f"重複ファイル : {duplicate_count}")
+
+    rows = db.get_duplicate_groups()
 
     db.close()
 
-    print()
-    print("=" * 60)
-    print("完了")
-    print("=" * 60)
-
-    messagebox.showinfo(
-
-        "QPhotoCleaner",
-
-        f"""
-スキャン完了
-
-画像ファイル
-    {image_count} 件
-
-動画ファイル
-    {video_count} 件
-
-SQLite登録
-    {len(files)} 件
-
-重複グループ
-    {duplicate_group_count} グループ
-
-重複ファイル
-    {duplicate_file_count} 件
-"""
-
-    )
-
     root.destroy()
+
+    #
+    # GUI表示
+    #
+
+    window = ResultWindow()
+
+    window.load_duplicates(rows)
+
+    window.run()
 
 
 if __name__ == "__main__":
