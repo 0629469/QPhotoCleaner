@@ -1,7 +1,7 @@
 """
 QPhotoCleaner
 GUI
-Version 1.2
+Version 1.3.0
 """
 
 import tkinter as tk
@@ -19,19 +19,20 @@ class ResultWindow:
 
         self.rows = []
 
+        #
+        # duplicate番号ごとのKeep状態
+        #
+        self.keep_map = {}
+
         self.root = tk.Tk()
 
         self.root.title("QPhotoCleaner")
 
-        self.root.geometry("1300x750")
+        self.root.geometry("1400x750")
 
         self.create_widgets()
 
     def create_widgets(self):
-
-        #
-        # 左右フレーム
-        #
 
         left = tk.Frame(self.root)
 
@@ -52,29 +53,62 @@ class ResultWindow:
             pady=10
         )
 
-        #
-        # TreeView
-        #
-
         columns = (
+
+            "keep",
             "group",
             "filename",
             "size",
             "type",
             "modified"
+
         )
 
         self.tree = ttk.Treeview(
+
             left,
+
             columns=columns,
+
             show="headings"
+
         )
 
-        self.tree.heading("group", text="Group")
-        self.tree.heading("filename", text="File Name")
-        self.tree.heading("size", text="Size")
-        self.tree.heading("type", text="Type")
-        self.tree.heading("modified", text="Modified")
+        self.tree.heading(
+            "keep",
+            text="Keep"
+        )
+
+        self.tree.heading(
+            "group",
+            text="Group"
+        )
+
+        self.tree.heading(
+            "filename",
+            text="File Name"
+        )
+
+        self.tree.heading(
+            "size",
+            text="Size"
+        )
+
+        self.tree.heading(
+            "type",
+            text="Type"
+        )
+
+        self.tree.heading(
+            "modified",
+            text="Modified"
+        )
+
+        self.tree.column(
+            "keep",
+            width=70,
+            anchor="center"
+        )
 
         self.tree.column(
             "group",
@@ -84,7 +118,7 @@ class ResultWindow:
 
         self.tree.column(
             "filename",
-            width=280
+            width=300
         )
 
         self.tree.column(
@@ -125,10 +159,6 @@ class ResultWindow:
             fill="y"
         )
 
-        #
-        # サムネイル
-        #
-
         self.thumbnail_label = tk.Label(
             right,
             width=300,
@@ -140,15 +170,12 @@ class ResultWindow:
             pady=(0, 10)
         )
 
-        #
-        # 情報表示
-        #
-
         self.info_filename = tk.Label(
             right,
             anchor="w",
             justify="left"
         )
+
         self.info_filename.pack(fill="x")
 
         self.info_resolution = tk.Label(
@@ -156,6 +183,7 @@ class ResultWindow:
             anchor="w",
             justify="left"
         )
+
         self.info_resolution.pack(fill="x")
 
         self.info_taken = tk.Label(
@@ -163,6 +191,7 @@ class ResultWindow:
             anchor="w",
             justify="left"
         )
+
         self.info_taken.pack(fill="x")
 
         self.info_size = tk.Label(
@@ -170,6 +199,7 @@ class ResultWindow:
             anchor="w",
             justify="left"
         )
+
         self.info_size.pack(fill="x")
 
         self.info_sha = tk.Label(
@@ -178,11 +208,8 @@ class ResultWindow:
             justify="left",
             wraplength=300
         )
-        self.info_sha.pack(fill="x")
 
-        #
-        # イベント
-        #
+        self.info_sha.pack(fill="x")
 
         self.tree.bind(
             "<<TreeviewSelect>>",
@@ -194,6 +221,7 @@ class ResultWindow:
         """
 
         self.rows.clear()
+        self.keep_map.clear()
 
         for item in self.tree.get_children():
             self.tree.delete(item)
@@ -214,6 +242,16 @@ class ResultWindow:
 
         import datetime
 
+        group = row["duplicate"]
+
+        #
+        # グループ最初の1件をKeep
+        #
+        if group not in self.keep_map:
+            self.keep_map[group] = row["path"]
+
+        keep = "✓" if self.keep_map[group] == row["path"] else ""
+
         modified = datetime.datetime.fromtimestamp(
             row["modified"]
         ).strftime("%Y-%m-%d %H:%M:%S")
@@ -227,6 +265,7 @@ class ResultWindow:
             "end",
             iid=str(len(self.rows) - 1),
             values=(
+                keep,
                 row["duplicate"],
                 row["filename"],
                 f"{size_mb:.2f} MB",
@@ -237,14 +276,13 @@ class ResultWindow:
 
     def load_duplicates(self, rows):
         """
-        重複一覧を表示
+        重複一覧表示
         """
 
         self.clear()
 
         for row in rows:
             self.add_file(row)
-
     def on_select(self, event):
         """
         TreeView選択時
@@ -301,9 +339,15 @@ class ResultWindow:
         )
 
     def get_selected(self):
+        """
+        選択行を返す
+        """
 
         return self.tree.selection()
 
     def run(self):
+        """
+        GUI開始
+        """
 
         self.root.mainloop()
