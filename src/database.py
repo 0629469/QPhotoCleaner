@@ -1,6 +1,7 @@
 """
 QPhotoCleaner
 SQLite Database
+Version 1.2.1
 """
 
 import sqlite3
@@ -22,6 +23,7 @@ class Database:
     def create(self):
 
         self.cur.execute("""
+
         CREATE TABLE IF NOT EXISTS files(
 
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,6 +40,7 @@ class Database:
             duplicate INTEGER DEFAULT 0
 
         )
+
         """)
 
         self.conn.commit()
@@ -45,6 +48,7 @@ class Database:
     def clear(self):
 
         self.cur.execute("DELETE FROM files")
+
         self.conn.commit()
 
     def insert(self, file):
@@ -85,14 +89,15 @@ class Database:
 
     def count(self):
 
-        self.cur.execute("SELECT COUNT(*) FROM files")
+        self.cur.execute(
+
+            "SELECT COUNT(*) FROM files"
+
+        )
 
         return self.cur.fetchone()[0]
 
     def get_duplicate_size_candidates(self):
-        """
-        サイズが重複しているファイルだけ取得
-        """
 
         self.cur.execute("""
 
@@ -112,16 +117,13 @@ class Database:
 
             )
 
-            ORDER BY size, filename
+            ORDER BY size
 
         """)
 
         return self.cur.fetchall()
 
     def update_sha256(self, file_id, sha256):
-        """
-        SHA-256を書き込む
-        """
 
         self.cur.execute(
 
@@ -140,9 +142,6 @@ class Database:
         )
 
     def get_duplicate_hashes(self):
-        """
-        SHA-256一致ファイル取得
-        """
 
         self.cur.execute("""
 
@@ -164,18 +163,18 @@ class Database:
 
             )
 
-            ORDER BY duplicate, filename
+            ORDER BY sha256
 
         """)
 
         return self.cur.fetchall()
-
     def mark_duplicates(self):
-        """
-        duplicate列へグループ番号を書き込む
-        """
 
-        self.cur.execute("UPDATE files SET duplicate=0")
+        self.cur.execute(
+
+            "UPDATE files SET duplicate=0"
+
+        )
 
         self.cur.execute("""
 
@@ -211,7 +210,13 @@ class Database:
 
                 """,
 
-                (group_no, row["sha256"])
+                (
+
+                    group_no,
+
+                    row["sha256"]
+
+                )
 
             )
 
@@ -221,7 +226,7 @@ class Database:
 
     def get_duplicate_groups(self):
         """
-        GUI用
+        GUI表示用
         """
 
         self.cur.execute("""
@@ -232,7 +237,13 @@ class Database:
 
             WHERE duplicate > 0
 
-            ORDER BY duplicate, filename
+            ORDER BY
+
+                duplicate,
+
+                filename,
+
+                path
 
         """)
 

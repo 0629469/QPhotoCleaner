@@ -1,7 +1,7 @@
 """
 QPhotoCleaner
 Main Program
-GUI Version
+GUI Version 1.2.1
 """
 
 import tkinter as tk
@@ -58,7 +58,9 @@ def main():
 
     db.commit()
 
-    print(f"SQLite登録 : {db.count()} 件")
+    count = db.count()
+
+    print(f"SQLite登録 : {count} 件")
 
     print("SHA-256計算中...")
 
@@ -70,18 +72,23 @@ def main():
 
     group_count = db.get_group_count()
 
-    print(f"重複グループ : {group_count}")
-    print(f"重複ファイル : {duplicate_count}")
+    print()
+
+    print("=" * 60)
+    print("結果")
+    print("=" * 60)
+
+    print(f"画像               : {image_count}")
+    print(f"動画               : {video_count}")
+    print(f"SQLite登録件数     : {count}")
+    print(f"重複グループ数     : {group_count}")
+    print(f"重複ファイル数     : {duplicate_count}")
 
     rows = db.get_duplicate_groups()
 
     db.close()
 
     root.destroy()
-
-    #
-    # GUI表示
-    #
 
     window = ResultWindow()
 
