@@ -1,6 +1,7 @@
 """
 QPhotoCleaner
 Duplicate Engine
+Version 1.5.0
 """
 
 from hashing import calculate_sha256
@@ -14,57 +15,87 @@ class DuplicateEngine:
 
     def calculate_hashes(self):
         """
-        サイズが重複しているファイルのみSHA-256を計算する
+        同一サイズのファイルについてSHA-256を計算する。
         """
 
         rows = self.db.get_duplicate_size_candidates()
 
         total = len(rows)
 
-        print(f"SHA-256計算対象 : {total} 件")
+        print(
+            f"SHA-256計算対象: {total}件"
+        )
 
-        for i, row in enumerate(rows, start=1):
+        for i, row in enumerate(rows, 1):
 
-            sha256 = calculate_sha256(row["path"])
+            try:
 
-            self.db.update_sha256(
-                row["id"],
-                sha256
-            )
+                sha256 = calculate_sha256(
+                    row["path"]
+                )
+
+                self.db.update_sha256(
+                    row["id"],
+                    sha256
+                )
+
+            except Exception as error:
+
+                print(
+                    f"SHA-256計算失敗: "
+                    f"{row['path']}"
+                )
+
+                print(error)
 
             if i % 50 == 0 or i == total:
-                print(f"{i} / {total}")
+
+                print(
+                    f"{i}/{total}"
+                )
 
         self.db.commit()
 
-        self.db.mark_duplicates()
+        #
+        # SHA-256が一致したファイルを
+        # 重複グループとしてマーキング
+        #
+
+        if hasattr(
+            self.db,
+            "mark_duplicates"
+        ):
+
+            self.db.mark_duplicates()
 
     def show_duplicates(self):
         """
-        重複一覧をコンソールへ表示する
+        完全一致した重複ファイルを表示する。
         """
 
         rows = self.db.get_duplicate_hashes()
 
-        current_group = None
+        current_hash = None
 
-        duplicate_count = 0
+        count = 0
 
         for row in rows:
 
-            group = row["duplicate"]
+            sha256 = row["sha256"]
 
-            if group != current_group:
+            if sha256 != current_hash:
 
-                current_group = group
+                current_hash = sha256
 
-                print()
-                print("=" * 50)
-                print(f"Duplicate Group {group}")
-                print("=" * 50)
+                print(
+                    f"\n===== Group "
+                    f"{row['duplicate']} ====="
+                )
 
-            print(row["path"])
+            print(
+                row["path"]
+            )
 
-            duplicate_count += 1
+            count += 1
 
-        return duplicate_count
+        return count
