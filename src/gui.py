@@ -1,7 +1,7 @@
 """
 QPhotoCleaner
 GUI
-Version 1.3.0
+Version 1.3.1
 """
 
 import tkinter as tk
@@ -19,9 +19,6 @@ class ResultWindow:
 
         self.rows = []
 
-        #
-        # duplicate番号ごとのKeep状態
-        #
         self.keep_map = {}
 
         self.root = tk.Tk()
@@ -35,7 +32,6 @@ class ResultWindow:
     def create_widgets(self):
 
         left = tk.Frame(self.root)
-
         right = tk.Frame(self.root)
 
         left.pack(
@@ -54,89 +50,33 @@ class ResultWindow:
         )
 
         columns = (
-
             "keep",
             "group",
             "filename",
             "size",
             "type",
             "modified"
-
         )
 
         self.tree = ttk.Treeview(
-
             left,
-
             columns=columns,
-
             show="headings"
-
         )
 
-        self.tree.heading(
-            "keep",
-            text="Keep"
-        )
+        self.tree.heading("keep", text="Keep")
+        self.tree.heading("group", text="Group")
+        self.tree.heading("filename", text="File Name")
+        self.tree.heading("size", text="Size")
+        self.tree.heading("type", text="Type")
+        self.tree.heading("modified", text="Modified")
 
-        self.tree.heading(
-            "group",
-            text="Group"
-        )
-
-        self.tree.heading(
-            "filename",
-            text="File Name"
-        )
-
-        self.tree.heading(
-            "size",
-            text="Size"
-        )
-
-        self.tree.heading(
-            "type",
-            text="Type"
-        )
-
-        self.tree.heading(
-            "modified",
-            text="Modified"
-        )
-
-        self.tree.column(
-            "keep",
-            width=70,
-            anchor="center"
-        )
-
-        self.tree.column(
-            "group",
-            width=70,
-            anchor="center"
-        )
-
-        self.tree.column(
-            "filename",
-            width=300
-        )
-
-        self.tree.column(
-            "size",
-            width=90,
-            anchor="e"
-        )
-
-        self.tree.column(
-            "type",
-            width=80,
-            anchor="center"
-        )
-
-        self.tree.column(
-            "modified",
-            width=170
-        )
+        self.tree.column("keep", width=70, anchor="center")
+        self.tree.column("group", width=70, anchor="center")
+        self.tree.column("filename", width=300)
+        self.tree.column("size", width=90, anchor="e")
+        self.tree.column("type", width=80, anchor="center")
+        self.tree.column("modified", width=170)
 
         scrollbar = ttk.Scrollbar(
             left,
@@ -170,36 +110,16 @@ class ResultWindow:
             pady=(0, 10)
         )
 
-        self.info_filename = tk.Label(
-            right,
-            anchor="w",
-            justify="left"
-        )
-
+        self.info_filename = tk.Label(right, anchor="w", justify="left")
         self.info_filename.pack(fill="x")
 
-        self.info_resolution = tk.Label(
-            right,
-            anchor="w",
-            justify="left"
-        )
-
+        self.info_resolution = tk.Label(right, anchor="w", justify="left")
         self.info_resolution.pack(fill="x")
 
-        self.info_taken = tk.Label(
-            right,
-            anchor="w",
-            justify="left"
-        )
-
+        self.info_taken = tk.Label(right, anchor="w", justify="left")
         self.info_taken.pack(fill="x")
 
-        self.info_size = tk.Label(
-            right,
-            anchor="w",
-            justify="left"
-        )
-
+        self.info_size = tk.Label(right, anchor="w", justify="left")
         self.info_size.pack(fill="x")
 
         self.info_sha = tk.Label(
@@ -208,13 +128,40 @@ class ResultWindow:
             justify="left",
             wraplength=300
         )
-
         self.info_sha.pack(fill="x")
 
         self.tree.bind(
             "<<TreeviewSelect>>",
             self.on_select
         )
+
+        self.tree.bind(
+            "<Double-1>",
+            self.on_double_click
+        )
+
+    def refresh_keep_column(self):
+        """
+        Keep列だけ再描画
+        """
+
+        for index, row in enumerate(self.rows):
+
+            keep = ""
+
+            if self.keep_map.get(row["duplicate"]) == row["path"]:
+                keep = "✓"
+
+            values = list(
+                self.tree.item(str(index), "values")
+            )
+
+            values[0] = keep
+
+            self.tree.item(
+                str(index),
+                values=values
+            )
     def clear(self):
         """
         一覧をクリア
@@ -244,13 +191,13 @@ class ResultWindow:
 
         group = row["duplicate"]
 
-        #
-        # グループ最初の1件をKeep
-        #
         if group not in self.keep_map:
             self.keep_map[group] = row["path"]
 
-        keep = "✓" if self.keep_map[group] == row["path"] else ""
+        keep = ""
+
+        if self.keep_map[group] == row["path"]:
+            keep = "✓"
 
         modified = datetime.datetime.fromtimestamp(
             row["modified"]
@@ -276,13 +223,40 @@ class ResultWindow:
 
     def load_duplicates(self, rows):
         """
-        重複一覧表示
+        一覧表示
         """
 
         self.clear()
 
         for row in rows:
             self.add_file(row)
+
+    def on_double_click(self, event):
+        """
+        Keep列ダブルクリック
+        """
+
+        item = self.tree.identify_row(event.y)
+
+        column = self.tree.identify_column(event.x)
+
+        if not item:
+            return
+
+        #
+        # Keep列以外は無視
+        #
+        if column != "#1":
+            return
+
+        row = self.rows[int(item)]
+
+        #
+        # このファイルをKeepにする
+        #
+        self.keep_map[row["duplicate"]] = row["path"]
+
+        self.refresh_keep_column()
     def on_select(self, event):
         """
         TreeView選択時
@@ -344,6 +318,34 @@ class ResultWindow:
         """
 
         return self.tree.selection()
+
+    def get_keep_files(self):
+        """
+        Keepとして選択されているファイルを返す
+        """
+
+        keep_files = []
+
+        for row in self.rows:
+
+            if self.keep_map.get(row["duplicate"]) == row["path"]:
+                keep_files.append(row["path"])
+
+        return keep_files
+
+    def get_delete_files(self):
+        """
+        Keep以外のファイルを返す
+        """
+
+        delete_files = []
+
+        for row in self.rows:
+
+            if self.keep_map.get(row["duplicate"]) != row["path"]:
+                delete_files.append(row["path"])
+
+        return delete_files
 
     def run(self):
         """
