@@ -1,83 +1,148 @@
 """
 QPhotoCleaner
-Image Information
+Image Information Engine
+Version 1.4.0
 """
 
 from pathlib import Path
+
 from PIL import Image
 from PIL.ExifTags import TAGS
 
 
 class ImageInfo:
 
+    RAW_EXTENSIONS = {
+        ".cr2",
+        ".cr3",
+        ".nef",
+        ".arw",
+        ".dng",
+        ".orf",
+        ".rw2",
+        ".raf",
+        ".srw",
+    }
+
     @staticmethod
     def get(filepath):
         """
         画像情報を取得する
 
-        Returns
-        -------
-        dict
+        RAWを含め、読み込みに失敗しても
+        QPhotoCleaner全体を停止させない。
         """
 
-        info = {
+        path = Path(filepath)
 
-            "width": None,
-            "height": None,
-            "taken": "",
-            "filesize": 0
-
+        result = {
+            "width": 0,
+            "height": 0,
+            "taken": "不明",
+            "filesize": 0,
         }
 
         try:
 
-            path = Path(filepath)
+            if path.exists():
+                result["filesize"] = path.stat().st_size
 
-            info["filesize"] = path.stat().st_size
+            with Image.open(path) as image:
 
-            with Image.open(filepath) as image:
-
-                info["width"] = image.width
-                info["height"] = image.height
+                result["width"] = image.width
+                result["height"] = image.height
 
                 exif = image.getexif()
 
                 if exif:
 
-                    for tag_id, value in exif.items():
+                    taken = (
+                        exif.get(36867)
+                        or exif.get(306)
+                    )
 
-                        tag = TAGS.get(tag_id, tag_id)
+                    if taken:
+                        result["taken"] = str(taken)
 
-                        if tag == "DateTimeOriginal":
+        except Exception as error:
 
-                            info["taken"] = str(value)
+            print(
+                f"画像情報を取得できません: {path}"
+            )
 
-                            break
+            print(error)
 
-        except Exception:
+            #
+            # RAWなどPillowで読めない場合も
+            # アプリケーションを停止しない
+            #
 
-            pass
+            result["taken"] = "情報取得不可"
 
-        return info
-
-    @staticmethod
-    def format_size(size):
-
-        if size >= 1024 * 1024 * 1024:
-            return f"{size / 1024 / 1024 / 1024:.2f} GB"
-
-        if size >= 1024 * 1024:
-            return f"{size / 1024 / 1024:.2f} MB"
-
-        if size >= 1024:
-            return f"{size / 1024:.2f} KB"
-
-        return f"{size} B"
+        return result
 
     @staticmethod
     def format_resolution(width, height):
+        """
+        解像度を表示用文字列へ変換
+        """
 
-        if width is None or height is None:
-            return ""
+        if not width or not height:
+            return "不明"
 
         return f"{width} × {height}"
+
+    @staticmethod
+    def format_size(filesize):
+        """
+        ファイルサイズを表示用文字列へ変換
+        """
+
+        if filesize is None:
+            return "不明"
+
+        if filesize < 1024:
+            return f"{filesize} B"
+
+        if filesize < 1024 * 1024:
+            return f"{filesize / 1024:.1f} KB"
+
+        if filesize < 1024 * 1024 * 1024:
+            return f"{filesize / 1024 / 1024:.2f} MB"
+
+        return f"{filesize / 1024 / 1024 / 1024:.2f} GB"
+
+    @staticmethod
+    def is_raw(filepath):
+        """
+        RAW画像か判定する
+        """
+
+        extension = Path(filepath).suffix.lower()
+
+        return extension in ImageInfo.RAW_EXTENSIONS
+
+    @staticmethod
+    def is_supported_image(filepath):
+        """
+        QPhotoCleanerで画像として扱う拡張子か判定する
+        """
+
+        extensions = {
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".gif",
+            ".bmp",
+            ".tif",
+            ".tiff",
+            ".webp",
+        }
+
+        extensions.update(
+            ImageInfo.RAW_EXTENSIONS
+        )
+
+        extension = Path(filepath).suffix.lower()
+
+        return extension in extensions

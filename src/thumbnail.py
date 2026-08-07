@@ -1,68 +1,102 @@
 """
 QPhotoCleaner
 Thumbnail Engine
+Version 1.4.0
 """
 
-from PIL import Image
-from PIL import ImageTk
+from pathlib import Path
+
+from PIL import Image, ImageTk
 
 
 class ThumbnailEngine:
 
-    def __init__(self, size=(256, 256)):
+    RAW_EXTENSIONS = {
+        ".cr2",
+        ".cr3",
+        ".nef",
+        ".arw",
+        ".dng",
+        ".orf",
+        ".rw2",
+        ".raf",
+        ".srw",
+    }
+
+    def __init__(self, size=(300, 300)):
 
         self.size = size
 
-        #
-        # Tkinterで画像が消えないように保持する
-        #
-        self.cache = {}
-
     def load(self, filepath):
         """
-        サムネイルを作成する
+        指定された画像からサムネイルを作成する。
 
-        Parameters
-        ----------
-        filepath : str
-
-        Returns
-        -------
-        ImageTk.PhotoImage
-            読み込み失敗時は None
+        読み込みに失敗した場合はNoneを返す。
         """
 
-        #
-        # キャッシュ
-        #
-        if filepath in self.cache:
-            return self.cache[filepath]
+        path = Path(filepath)
+
+        if not path.exists():
+            return None
 
         try:
 
-            image = Image.open(filepath)
+            with Image.open(path) as image:
 
-            image.thumbnail(
-                self.size,
-                Image.Resampling.LANCZOS
+                image = image.convert("RGB")
+
+                image.thumbnail(
+                    self.size,
+                    Image.Resampling.LANCZOS
+                )
+
+                photo = ImageTk.PhotoImage(
+                    image.copy()
+                )
+
+                return photo
+
+        except Exception as error:
+
+            print(
+                f"サムネイルを作成できません: {path}"
             )
 
-            photo = ImageTk.PhotoImage(image)
+            print(error)
 
-            self.cache[filepath] = photo
-
-            return photo
-
-        except Exception:
-
-            #
-            # 読めない画像
-            #
             return None
 
-    def clear(self):
+    @staticmethod
+    def is_raw(filepath):
         """
-        キャッシュをクリア
+        RAW画像か判定する。
         """
 
-        self.cache.clear()
+        extension = Path(filepath).suffix.lower()
+
+        return extension in ThumbnailEngine.RAW_EXTENSIONS
+
+    @staticmethod
+    def is_supported(filepath):
+        """
+        サムネイル対象の画像か判定する。
+        """
+
+        extensions = {
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".gif",
+            ".bmp",
+            ".tif",
+            ".tiff",
+            ".webp",
+        }
+
+        extensions.update(
+            ThumbnailEngine.RAW_EXTENSIONS
+        )
+
+        extension = Path(filepath).suffix.lower()
+
+        return extension in extensions
