@@ -1,13 +1,12 @@
 """
 QPhotoCleaner
 Image Information Engine
-Version 1.4.0
+Version 1.4.1
 """
 
 from pathlib import Path
 
 from PIL import Image
-from PIL.ExifTags import TAGS
 
 
 class ImageInfo:
@@ -27,10 +26,7 @@ class ImageInfo:
     @staticmethod
     def get(filepath):
         """
-        画像情報を取得する
-
-        RAWを含め、読み込みに失敗しても
-        QPhotoCleaner全体を停止させない。
+        画像情報を取得する。
         """
 
         path = Path(filepath)
@@ -52,17 +48,10 @@ class ImageInfo:
                 result["width"] = image.width
                 result["height"] = image.height
 
-                exif = image.getexif()
-
-                if exif:
-
-                    taken = (
-                        exif.get(36867)
-                        or exif.get(306)
-                    )
-
-                    if taken:
-                        result["taken"] = str(taken)
+                ImageInfo._read_exif(
+                    image,
+                    result
+                )
 
         except Exception as error:
 
@@ -72,19 +61,55 @@ class ImageInfo:
 
             print(error)
 
-            #
-            # RAWなどPillowで読めない場合も
-            # アプリケーションを停止しない
-            #
-
             result["taken"] = "情報取得不可"
 
         return result
 
     @staticmethod
+    def _read_exif(image, result):
+        """
+        Exif情報から撮影日時を取得する。
+        """
+
+        try:
+
+            exif = image.getexif()
+
+            if not exif:
+                return
+
+            #
+            # DateTimeOriginal
+            #
+            taken = exif.get(36867)
+
+            #
+            # DateTimeDigitized
+            #
+            if not taken:
+                taken = exif.get(36868)
+
+            #
+            # DateTime
+            #
+            if not taken:
+                taken = exif.get(306)
+
+            if taken:
+                result["taken"] = str(taken)
+
+        except Exception as error:
+
+            print(
+                "Exif情報を取得できません"
+            )
+
+            print(error)
+
+    @staticmethod
     def format_resolution(width, height):
         """
-        解像度を表示用文字列へ変換
+        解像度を表示用文字列へ変換する。
         """
 
         if not width or not height:
@@ -95,7 +120,7 @@ class ImageInfo:
     @staticmethod
     def format_size(filesize):
         """
-        ファイルサイズを表示用文字列へ変換
+        ファイルサイズを表示用文字列へ変換する。
         """
 
         if filesize is None:
@@ -115,7 +140,7 @@ class ImageInfo:
     @staticmethod
     def is_raw(filepath):
         """
-        RAW画像か判定する
+        RAW画像か判定する。
         """
 
         extension = Path(filepath).suffix.lower()
@@ -125,7 +150,7 @@ class ImageInfo:
     @staticmethod
     def is_supported_image(filepath):
         """
-        QPhotoCleanerで画像として扱う拡張子か判定する
+        QPhotoCleanerで画像として扱う拡張子か判定する。
         """
 
         extensions = {
