@@ -1,11 +1,12 @@
 """
 QPhotoCleaner
 SQLite Database
-Version 1.2.1
+Version 1.5.1
 """
 
 import sqlite3
 from pathlib import Path
+
 
 DB_FILE = Path("database/qphotocleaner.db")
 
@@ -23,7 +24,6 @@ class Database:
     def create(self):
 
         self.cur.execute("""
-
         CREATE TABLE IF NOT EXISTS files(
 
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,24 +37,47 @@ class Database:
 
             sha256 TEXT,
 
-            duplicate INTEGER DEFAULT 0
+            duplicate INTEGER DEFAULT 0,
+
+            perceptual_hash TEXT
 
         )
-
         """)
+
+        #
+        # 既存データベースに
+        # perceptual_hash列がない場合に追加
+        #
+
+        self.cur.execute(
+            "PRAGMA table_info(files)"
+        )
+
+        columns = [
+            row["name"]
+            for row in self.cur.fetchall()
+        ]
+
+        if "perceptual_hash" not in columns:
+
+            self.cur.execute("""
+                ALTER TABLE files
+                ADD COLUMN perceptual_hash TEXT
+            """)
 
         self.conn.commit()
 
     def clear(self):
 
-        self.cur.execute("DELETE FROM files")
+        self.cur.execute(
+            "DELETE FROM files"
+        )
 
         self.conn.commit()
 
     def insert(self, file):
 
         self.cur.execute("""
-
         INSERT OR REPLACE INTO files(
 
             path,
@@ -63,24 +86,26 @@ class Database:
             size,
             modified,
             media_type,
-            sha256
+            sha256,
+            duplicate,
+            perceptual_hash
 
         )
 
-        VALUES(?,?,?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,?,?)
 
         """,
 
         (
-
             file["path"],
             file["filename"],
             file["extension"],
             file["size"],
             file["modified"],
             file["media_type"],
+            None,
+            0,
             None
-
         ))
 
     def commit(self):
@@ -90,9 +115,7 @@ class Database:
     def count(self):
 
         self.cur.execute(
-
             "SELECT COUNT(*) FROM files"
-
         )
 
         return self.cur.fetchone()[0]
@@ -100,7 +123,6 @@ class Database:
     def get_duplicate_size_candidates(self):
 
         self.cur.execute("""
-
             SELECT *
 
             FROM files
@@ -118,33 +140,69 @@ class Database:
             )
 
             ORDER BY size
-
         """)
 
         return self.cur.fetchall()
 
-    def update_sha256(self, file_id, sha256):
+    def get_image_candidates(self):
+
+        self.cur.execute("""
+            SELECT *
+
+            FROM files
+
+            WHERE media_type = 'image'
+
+            ORDER BY id
+        """)
+
+        return self.cur.fetchall()
+
+    def update_sha256(
+        self,
+        file_id,
+        sha256
+    ):
 
         self.cur.execute(
-
             """
-
             UPDATE files
 
             SET sha256=?
 
             WHERE id=?
-
             """,
 
-            (sha256, file_id)
+            (
+                sha256,
+                file_id
+            )
+        )
 
+    def update_perceptual_hash(
+        self,
+        file_id,
+        perceptual_hash
+    ):
+
+        self.cur.execute(
+            """
+            UPDATE files
+
+            SET perceptual_hash=?
+
+            WHERE id=?
+            """,
+
+            (
+                perceptual_hash,
+                file_id
+            )
         )
 
     def get_duplicate_hashes(self):
 
         self.cur.execute("""
-
             SELECT *
 
             FROM files
@@ -164,20 +222,31 @@ class Database:
             )
 
             ORDER BY sha256
-
         """)
 
         return self.cur.fetchall()
+
+    def get_perceptual_hashes(self):
+
+        self.cur.execute("""
+            SELECT *
+
+            FROM files
+
+            WHERE perceptual_hash IS NOT NULL
+
+            ORDER BY perceptual_hash
+        """)
+
+        return self.cur.fetchall()
+
     def mark_duplicates(self):
 
         self.cur.execute(
-
             "UPDATE files SET duplicate=0"
-
         )
 
         self.cur.execute("""
-
             SELECT sha256
 
             FROM files
@@ -189,7 +258,6 @@ class Database:
             HAVING COUNT(*) > 1
 
             ORDER BY sha256
-
         """)
 
         rows = self.cur.fetchall()
@@ -199,25 +267,18 @@ class Database:
         for row in rows:
 
             self.cur.execute(
-
                 """
-
                 UPDATE files
 
                 SET duplicate=?
 
                 WHERE sha256=?
-
                 """,
 
                 (
-
                     group_no,
-
                     row["sha256"]
-
                 )
-
             )
 
             group_no += 1
@@ -226,11 +287,15 @@ class Database:
 
     def get_duplicate_groups(self):
         """
-        GUI表示用
+        GUI表示用。
+
+        main.pyから渡され、
+        gui.pyがrow["duplicate"]などで
+        利用するため、sqlite3.Rowの
+        リストをそのまま返す。
         """
 
         self.cur.execute("""
-
             SELECT *
 
             FROM files
@@ -238,13 +303,9 @@ class Database:
             WHERE duplicate > 0
 
             ORDER BY
-
                 duplicate,
-
                 filename,
-
                 path
-
         """)
 
         return self.cur.fetchall()
@@ -255,13 +316,11 @@ class Database:
         """
 
         self.cur.execute("""
-
             SELECT COUNT(DISTINCT duplicate)
 
             FROM files
 
             WHERE duplicate > 0
-
         """)
 
         return self.cur.fetchone()[0]
