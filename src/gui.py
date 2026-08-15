@@ -1,11 +1,11 @@
 """
-QPhotoCleaner GUI
-Version 1.4.0
+QPhotoCleaner
+GUI
+Version 1.4.4
 """
 
 import tkinter as tk
 from tkinter import ttk, messagebox
-import datetime
 
 from thumbnail import ThumbnailEngine
 from imageinfo import ImageInfo
@@ -13,6 +13,7 @@ from delete import DeleteEngine
 
 
 class ResultWindow:
+
     def __init__(self):
         self.thumbnail = ThumbnailEngine((300, 300))
         self.delete_engine = DeleteEngine()
@@ -77,29 +78,64 @@ class ResultWindow:
         for widget in (self.info_filename, self.info_resolution, self.info_taken, self.info_size, self.info_sha):
             widget.config(text="")
 
-    def add_file(self, row):
-        group = row["duplicate"]
-        if group not in self.keep_map:
-            self.keep_map[group] = row["path"]
-        keep = "✓" if self.keep_map[group] == row["path"] else ""
-        modified = datetime.datetime.fromtimestamp(row["modified"]).strftime("%Y-%m-%d %H:%M:%S")
-        size_mb = row["size"] / 1024 / 1024
-        self.rows.append(row)
-        self.tree.insert("", "end", iid=str(len(self.rows) - 1), values=(
-            keep, row["duplicate"], row["filename"], f"{size_mb:.2f} MB", row["extension"], modified
-        ))
+    def is_copy_name(self, filename):
+        name = filename.lower()
+        keywords = (
+            "コピー", "copy", "_copy", "-copy", "_コピー", "-コピー",
+            "(1)", "(2)", "(3)", "(4)", "(5)", "(6)", "(7)", "(8)", "(9)"
+        )
+        return any(keyword in name for keyword in keywords)
+
+    def select_initial_keep(self, group_rows):
+        if not group_rows:
+            return None
+        normal_files = []
+        copy_files = []
+        for row in group_rows:
+            if self.is_copy_name(row["filename"]):
+                copy_files.append(row)
+            else:
+                normal_files.append(row)
+        if normal_files:
+            normal_files.sort(key=lambda row: (len(row["filename"]), row["filename"].lower()))
+            return normal_files[0]["path"]
+        return copy_files[0]["path"]
 
     def load_duplicates(self, rows):
         self.clear()
-        for row in rows:
-            self.add_file(row)
+        self.rows = list(rows)
+
+        groups = {}
+        for row in self.rows:
+            group = row["duplicate"]
+            groups.setdefault(group, []).append(row)
+
+        for group, group_rows in groups.items():
+            self.keep_map[group] = self.select_initial_keep(group_rows)
+
+        for index, row in enumerate(self.rows):
+            self.insert_row(index, row)
+
+    def insert_row(self, index, row):
+        import datetime
+        group = row["duplicate"]
+        keep = "✓" if self.keep_map.get(group) == row["path"] else ""
+        modified = datetime.datetime.fromtimestamp(row["modified"]).strftime("%Y-%m-%d %H:%M:%S")
+        size_mb = row["size"] / 1024 / 1024
+        self.tree.insert(
+            "", "end", iid=f"row_{index}",
+            values=(keep, group, row["filename"], f"{size_mb:.2f} MB", row["extension"], modified)
+        )
 
     def refresh_keep_column(self):
         for index, row in enumerate(self.rows):
-            values = list(self.tree.item(str(index), "values"))
+            item_id = f"row_{index}"
+            if not self.tree.exists(item_id):
+                continue
+            values = list(self.tree.item(item_id, "values"))
             if values:
                 values[0] = "✓" if self.keep_map.get(row["duplicate"]) == row["path"] else ""
-                self.tree.item(str(index), values=values)
+                self.tree.item(item_id, values=values)
 
     def set_keep(self, row):
         self.keep_map[row["duplicate"]] = row["path"]
@@ -108,26 +144,43 @@ class ResultWindow:
     def on_click(self, event):
         item = self.tree.identify_row(event.y)
         column = self.tree.identify_column(event.x)
-        if not item:
+        if not item or column != "#1":
             return
-        if column == "#1":
-            row = self.rows[int(item)]
-            self.set_keep(row)
-            self.tree.selection_set(item)
+        index = self.get_row_index(item)
+        if index is None:
+            return
+        self.set_keep(self.rows[index])
+        self.tree.selection_set(item)
 
     def on_double_click(self, event):
         item = self.tree.identify_row(event.y)
         if not item:
             return
-        row = self.rows[int(item)]
-        self.set_keep(row)
+        index = self.get_row_index(item)
+        if index is None:
+            return
+        self.set_keep(self.rows[index])
         self.tree.selection_set(item)
+
+    def get_row_index(self, item):
+        if not item.startswith("row_"):
+            return None
+        try:
+            index = int(item[4:])
+        except ValueError:
+            return None
+        if index < 0 or index >= len(self.rows):
+            return None
+        return index
 
     def on_select(self, event):
         selection = self.tree.selection()
         if not selection:
             return
-        row = self.rows[int(selection[0])]
+        index = self.get_row_index(selection[0])
+        if index is None:
+            return
+        row = self.rows[index]
         photo = self.thumbnail.load(row["path"])
         if photo:
             self.thumbnail_label.configure(image=photo)
@@ -156,14 +209,20 @@ class ResultWindow:
         if not delete_files:
             messagebox.showinfo("QPhotoCleaner", "削除候補はありません。")
             return
-        messagebox.showinfo("削除候補の確認", f"削除候補 : {len(delete_files)} 件\n\nKeepに指定されていないファイルです。\n現在はまだファイルを移動しません。")
+        messagebox.showinfo(
+            "削除候補の確認",
+            f"削除候補 : {len(delete_files)} 件\n\nKeepに指定されていないファイルです。\n現在はまだファイルを移動しません。"
+        )
 
     def move_delete_files(self):
         delete_files = self.get_delete_files()
         if not delete_files:
             messagebox.showinfo("QPhotoCleaner", "ごみ箱へ移動するファイルはありません。")
             return
-        if not messagebox.askyesno("ごみ箱へ移動", f"Keep以外の {len(delete_files)} 件をWindowsのごみ箱へ移動します。\n\nKeepに指定したファイルは移動しません。\n\n実行しますか？"):
+        if not messagebox.askyesno(
+            "ごみ箱へ移動",
+            f"Keep以外の {len(delete_files)} 件をWindowsのごみ箱へ移動します。\n\nKeepに指定したファイルは移動しません。\n\n実行しますか？"
+        ):
             return
         success_count, failure_count, failed_files = self.delete_engine.move_files_to_trash(delete_files)
         message = f"ごみ箱への移動が完了しました。\n\n成功 : {success_count} 件\n失敗 : {failure_count} 件"
