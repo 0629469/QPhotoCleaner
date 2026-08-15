@@ -1,6 +1,7 @@
 """
 QPhotoCleaner
-Folder Scanner
+File Scanner
+Version 1.5.0
 """
 
 from pathlib import Path
@@ -10,75 +11,110 @@ IMAGE_EXTENSIONS = {
     ".jpg",
     ".jpeg",
     ".png",
-    ".bmp",
     ".gif",
+    ".bmp",
     ".tif",
     ".tiff",
     ".webp",
-    ".heic",
-    ".heif",
-    ".raw",
     ".cr2",
     ".cr3",
     ".nef",
     ".arw",
+    ".dng",
     ".orf",
     ".rw2",
-    ".dng",
+    ".raf",
+    ".srw",
 }
 
 VIDEO_EXTENSIONS = {
     ".mp4",
     ".mov",
     ".avi",
+    ".mkv",
     ".mts",
     ".m2ts",
     ".wmv",
-    ".mkv",
-    ".mpg",
-    ".mpeg",
-    ".3gp",
     ".flv",
     ".webm",
 }
 
 
+def get_media_type(path):
+    """
+    拡張子からメディア種別を判定する。
+    """
+
+    extension = Path(path).suffix.lower()
+
+    if extension in IMAGE_EXTENSIONS:
+        return "image"
+
+    if extension in VIDEO_EXTENSIONS:
+        return "video"
+
+    return None
+
+
 def scan_folder(folder):
     """
-    指定フォルダ以下を再帰的にスキャンする
+    フォルダを再帰的にスキャンする。
+
+    対象:
+        image
+        video
+
+    QNAP上の共有フォルダを
+    Windowsからネットワークドライブや
+    UNCパスとして指定して使用できる。
     """
 
-    folder = Path(folder)
+    results = []
 
-    files = []
+    root = Path(folder)
 
-    for path in folder.rglob("*"):
+    if not root.exists():
+        return results
+
+    for path in root.rglob("*"):
 
         if not path.is_file():
             continue
 
-        extension = path.suffix.lower()
+        media_type = get_media_type(path)
 
-        if extension in IMAGE_EXTENSIONS:
-            media_type = "image"
-
-        elif extension in VIDEO_EXTENSIONS:
-            media_type = "video"
-
-        else:
+        if media_type is None:
             continue
 
-        stat = path.stat()
+        try:
 
-        files.append(
-            {
+            stat = path.stat()
+
+            results.append({
+
                 "path": str(path),
-                "filename": path.name,
-                "extension": extension,
-                "size": stat.st_size,
-                "modified": stat.st_mtime,
-                "media_type": media_type,
-            }
-        )
 
-    return files
+                "filename": path.name,
+
+                "extension": path.suffix.lower(),
+
+                "size": stat.st_size,
+
+                "modified": stat.st_mtime,
+
+                "media_type": media_type,
+
+            })
+
+        except OSError as error:
+
+            print(
+                f"[SKIP] ファイル情報取得失敗: "
+                f"{path}"
+            )
+
+            print(error)
+
+            continue
+
+    return results

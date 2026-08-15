@@ -15,7 +15,10 @@ class DuplicateEngine:
 
     def calculate_hashes(self):
         """
-        同一サイズのファイルについてSHA-256を計算する。
+        SHA-256を計算する。
+
+        同じファイルサイズのファイルだけを
+        SHA-256比較対象とする。
         """
 
         rows = self.db.get_duplicate_size_candidates()
@@ -57,16 +60,11 @@ class DuplicateEngine:
         self.db.commit()
 
         #
-        # SHA-256が一致したファイルを
-        # 重複グループとしてマーキング
+        # 完全一致したファイルを
+        # 重複グループとして登録
         #
 
-        if hasattr(
-            self.db,
-            "mark_duplicates"
-        ):
-
-            self.db.mark_duplicates()
+        self.db.mark_duplicates()
 
     def show_duplicates(self):
         """

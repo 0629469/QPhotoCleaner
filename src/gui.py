@@ -1,7 +1,7 @@
 """
 QPhotoCleaner
 GUI
-Version 1.3.3
+Version 1.5.0
 """
 
 import tkinter as tk
@@ -15,21 +15,21 @@ from delete import DeleteEngine
 class ResultWindow:
 
     def __init__(self):
-
         self.thumbnail = ThumbnailEngine((300, 300))
-
         self.delete_engine = DeleteEngine()
 
         self.rows = []
         self.keep_map = {}
 
         self.root = tk.Tk()
-
         self.root.title("QPhotoCleaner")
-
         self.root.geometry("1400x800")
 
         self.create_widgets()
+
+    # =========================================================
+    # GUI
+    # =========================================================
 
     def create_widgets(self):
 
@@ -66,12 +66,23 @@ class ResultWindow:
             show="headings"
         )
 
-        self.tree.heading("keep", text="Keep")
-        self.tree.heading("group", text="Group")
-        self.tree.heading("filename", text="File Name")
-        self.tree.heading("size", text="Size")
-        self.tree.heading("type", text="Type")
-        self.tree.heading("modified", text="Modified")
+        headings = (
+            "Keep",
+            "Group",
+            "File Name",
+            "Size",
+            "Type",
+            "Modified"
+        )
+
+        for column, heading in zip(
+            columns,
+            headings
+        ):
+            self.tree.heading(
+                column,
+                text=heading
+            )
 
         self.tree.column(
             "keep",
@@ -128,6 +139,10 @@ class ResultWindow:
             fill="y"
         )
 
+        # -----------------------------------------------------
+        # Thumbnail
+        # -----------------------------------------------------
+
         self.thumbnail_label = tk.Label(
             right,
             width=300,
@@ -139,13 +154,19 @@ class ResultWindow:
             pady=(0, 10)
         )
 
+        # -----------------------------------------------------
+        # File information
+        # -----------------------------------------------------
+
         self.info_filename = tk.Label(
             right,
             anchor="w",
             justify="left"
         )
 
-        self.info_filename.pack(fill="x")
+        self.info_filename.pack(
+            fill="x"
+        )
 
         self.info_resolution = tk.Label(
             right,
@@ -153,7 +174,9 @@ class ResultWindow:
             justify="left"
         )
 
-        self.info_resolution.pack(fill="x")
+        self.info_resolution.pack(
+            fill="x"
+        )
 
         self.info_taken = tk.Label(
             right,
@@ -161,7 +184,9 @@ class ResultWindow:
             justify="left"
         )
 
-        self.info_taken.pack(fill="x")
+        self.info_taken.pack(
+            fill="x"
+        )
 
         self.info_size = tk.Label(
             right,
@@ -169,7 +194,9 @@ class ResultWindow:
             justify="left"
         )
 
-        self.info_size.pack(fill="x")
+        self.info_size.pack(
+            fill="x"
+        )
 
         self.info_sha = tk.Label(
             right,
@@ -178,15 +205,17 @@ class ResultWindow:
             wraplength=300
         )
 
-        self.info_sha.pack(fill="x")
+        self.info_sha.pack(
+            fill="x"
+        )
 
-        #
-        # 削除候補確認
-        #
+        # -----------------------------------------------------
+        # Buttons
+        # -----------------------------------------------------
 
         self.review_button = tk.Button(
             right,
-            text="Keep以外を確認",
+            text="削除候補を確認",
             command=self.review_delete_files
         )
 
@@ -194,10 +223,6 @@ class ResultWindow:
             fill="x",
             pady=(20, 5)
         )
-
-        #
-        # ごみ箱移動
-        #
 
         self.delete_button = tk.Button(
             right,
@@ -210,15 +235,28 @@ class ResultWindow:
             pady=5
         )
 
+        # -----------------------------------------------------
+        # Events
+        # -----------------------------------------------------
+
         self.tree.bind(
             "<<TreeviewSelect>>",
             self.on_select
         )
 
         self.tree.bind(
+            "<Button-1>",
+            self.on_click
+        )
+
+        self.tree.bind(
             "<Double-1>",
             self.on_double_click
         )
+
+    # =========================================================
+    # Clear
+    # =========================================================
 
     def clear(self):
 
@@ -228,7 +266,10 @@ class ResultWindow:
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        self.thumbnail_label.config(image="")
+        self.thumbnail_label.config(
+            image=""
+        )
+
         self.thumbnail_label.image = None
 
         self.info_filename.config(text="")
@@ -237,35 +278,165 @@ class ResultWindow:
         self.info_size.config(text="")
         self.info_sha.config(text="")
 
-    def add_file(self, row):
+    # =========================================================
+    # Copy name detection
+    # =========================================================
+
+    def is_copy_name(
+        self,
+        filename
+    ):
+
+        name = filename.lower()
+
+        keywords = (
+            "コピー",
+            "copy",
+            "_copy",
+            "-copy",
+            "_コピー",
+            "-コピー",
+            "(1)",
+            "(2)",
+            "(3)",
+            "(4)",
+            "(5)",
+            "(6)",
+            "(7)",
+            "(8)",
+            "(9)"
+        )
+
+        return any(
+            keyword in name
+            for keyword in keywords
+        )
+
+    # =========================================================
+    # Initial KEEP selection
+    # =========================================================
+
+    def select_initial_keep(
+        self,
+        group_rows
+    ):
+
+        if not group_rows:
+            return None
+
+        normal_files = []
+        copy_files = []
+
+        for row in group_rows:
+
+            if self.is_copy_name(
+                row["filename"]
+            ):
+                copy_files.append(row)
+
+            else:
+                normal_files.append(row)
+
+        if normal_files:
+
+            normal_files.sort(
+                key=lambda row: (
+                    len(row["filename"]),
+                    row["filename"].lower()
+                )
+            )
+
+            return normal_files[0]["path"]
+
+        return copy_files[0]["path"]
+
+    # =========================================================
+    # Load duplicate groups
+    # =========================================================
+
+    def load_duplicates(
+        self,
+        rows
+    ):
+
+        self.clear()
+
+        self.rows = list(rows)
+
+        groups = {}
+
+        for row in self.rows:
+
+            group = row["duplicate"]
+
+            if group not in groups:
+
+                groups[group] = []
+
+            groups[group].append(row)
+
+        for group, group_rows in groups.items():
+
+            self.keep_map[group] = (
+                self.select_initial_keep(
+                    group_rows
+                )
+            )
+
+        for index, row in enumerate(
+            self.rows
+        ):
+
+            self.insert_row(
+                index,
+                row
+            )
+
+    # =========================================================
+    # Insert row
+    # =========================================================
+
+    def insert_row(
+        self,
+        index,
+        row
+    ):
 
         import datetime
 
         group = row["duplicate"]
 
-        if group not in self.keep_map:
-            self.keep_map[group] = row["path"]
-
         keep = ""
 
-        if self.keep_map[group] == row["path"]:
+        if self.keep_map.get(
+            group
+        ) == row["path"]:
+
             keep = "✓"
 
-        modified = datetime.datetime.fromtimestamp(
-            row["modified"]
-        ).strftime("%Y-%m-%d %H:%M:%S")
+        modified = (
+            datetime.datetime
+            .fromtimestamp(
+                row["modified"]
+            )
+            .strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+        )
 
-        size_mb = row["size"] / 1024 / 1024
-
-        self.rows.append(row)
+        size_mb = (
+            row["size"]
+            / 1024
+            / 1024
+        )
 
         self.tree.insert(
             "",
             "end",
-            iid=str(len(self.rows) - 1),
+            iid=f"row_{index}",
             values=(
                 keep,
-                row["duplicate"],
+                group,
                 row["filename"],
                 f"{size_mb:.2f} MB",
                 row["extension"],
@@ -273,44 +444,78 @@ class ResultWindow:
             )
         )
 
-    def load_duplicates(self, rows):
-
-        self.clear()
-
-        for row in rows:
-            self.add_file(row)
+    # =========================================================
+    # Refresh KEEP column
+    # =========================================================
 
     def refresh_keep_column(self):
 
-        for index, row in enumerate(self.rows):
+        for index, row in enumerate(
+            self.rows
+        ):
 
-            keep = ""
+            item_id = f"row_{index}"
 
-            if self.keep_map.get(
-                row["duplicate"]
-            ) == row["path"]:
-
-                keep = "✓"
+            if not self.tree.exists(
+                item_id
+            ):
+                continue
 
             values = list(
                 self.tree.item(
-                    str(index),
+                    item_id,
                     "values"
                 )
             )
 
-            values[0] = keep
+            if values:
 
-            self.tree.item(
-                str(index),
-                values=values
-            )
+                if self.keep_map.get(
+                    row["duplicate"]
+                ) == row["path"]:
 
-    def on_double_click(self, event):
+                    values[0] = "✓"
 
-        item = self.tree.identify_row(event.y)
+                else:
 
-        column = self.tree.identify_column(event.x)
+                    values[0] = ""
+
+                self.tree.item(
+                    item_id,
+                    values=values
+                )
+
+    # =========================================================
+    # Set KEEP
+    # =========================================================
+
+    def set_keep(
+        self,
+        row
+    ):
+
+        group = row["duplicate"]
+
+        self.keep_map[group] = row["path"]
+
+        self.refresh_keep_column()
+
+    # =========================================================
+    # Mouse click
+    # =========================================================
+
+    def on_click(
+        self,
+        event
+    ):
+
+        item = self.tree.identify_row(
+            event.y
+        )
+
+        column = self.tree.identify_column(
+            event.x
+        )
 
         if not item:
             return
@@ -318,20 +523,106 @@ class ResultWindow:
         if column != "#1":
             return
 
-        row = self.rows[int(item)]
+        index = self.get_row_index(
+            item
+        )
 
-        self.keep_map[row["duplicate"]] = row["path"]
+        if index is None:
+            return
 
-        self.refresh_keep_column()
+        self.set_keep(
+            self.rows[index]
+        )
 
-    def on_select(self, event):
+        self.tree.selection_set(
+            item
+        )
+
+    # =========================================================
+    # Double click
+    # =========================================================
+
+    def on_double_click(
+        self,
+        event
+    ):
+
+        item = self.tree.identify_row(
+            event.y
+        )
+
+        if not item:
+            return
+
+        index = self.get_row_index(
+            item
+        )
+
+        if index is None:
+            return
+
+        self.set_keep(
+            self.rows[index]
+        )
+
+        self.tree.selection_set(
+            item
+        )
+
+    # =========================================================
+    # Treeview ID -> row index
+    # =========================================================
+
+    def get_row_index(
+        self,
+        item
+    ):
+
+        if not item.startswith(
+            "row_"
+        ):
+            return None
+
+        try:
+
+            index = int(
+                item[4:]
+            )
+
+        except ValueError:
+
+            return None
+
+        if index < 0:
+            return None
+
+        if index >= len(
+            self.rows
+        ):
+            return None
+
+        return index
+
+    # =========================================================
+    # Selection
+    # =========================================================
+
+    def on_select(
+        self,
+        event
+    ):
 
         selection = self.tree.selection()
 
         if not selection:
             return
 
-        index = int(selection[0])
+        index = self.get_row_index(
+            selection[0]
+        )
+
+        if index is None:
+            return
 
         row = self.rows[index]
 
@@ -364,10 +655,12 @@ class ResultWindow:
         )
 
         self.info_resolution.config(
-            text="Resolution : " +
-            ImageInfo.format_resolution(
-                info["width"],
-                info["height"]
+            text=(
+                "Resolution : "
+                + ImageInfo.format_resolution(
+                    info["width"],
+                    info["height"]
+                )
             )
         )
 
@@ -376,9 +669,11 @@ class ResultWindow:
         )
 
         self.info_size.config(
-            text="File Size : " +
-            ImageInfo.format_size(
-                info["filesize"]
+            text=(
+                "File Size : "
+                + ImageInfo.format_size(
+                    info["filesize"]
+                )
             )
         )
 
@@ -386,45 +681,43 @@ class ResultWindow:
             text=f"SHA256 : {row['sha256']}"
         )
 
-    def get_selected(self):
-
-        return self.tree.selection()
+    # =========================================================
+    # KEEP files
+    # =========================================================
 
     def get_keep_files(self):
 
-        keep_files = []
-
-        for row in self.rows:
-
+        return [
+            row["path"]
+            for row in self.rows
             if self.keep_map.get(
                 row["duplicate"]
-            ) == row["path"]:
+            ) == row["path"]
+        ]
 
-                keep_files.append(
-                    row["path"]
-                )
-
-        return keep_files
+    # =========================================================
+    # Delete candidates
+    # =========================================================
 
     def get_delete_files(self):
 
-        delete_files = []
-
-        for row in self.rows:
-
+        return [
+            row["path"]
+            for row in self.rows
             if self.keep_map.get(
                 row["duplicate"]
-            ) != row["path"]:
+            ) != row["path"]
+        ]
 
-                delete_files.append(
-                    row["path"]
-                )
-
-        return delete_files
+    # =========================================================
+    # DELETE CANDIDATE REVIEW
+    # =========================================================
 
     def review_delete_files(self):
 
-        delete_files = self.get_delete_files()
+        delete_files = (
+            self.get_delete_files()
+        )
 
         if not delete_files:
 
@@ -435,20 +728,117 @@ class ResultWindow:
 
             return
 
-        message = (
-            f"削除候補 : {len(delete_files)} 件\n\n"
-            "Keepに指定されていないファイルです。\n"
-            "現在はまだファイルを移動しません。"
+        dialog = tk.Toplevel(
+            self.root
         )
 
-        messagebox.showinfo(
-            "削除候補の確認",
-            message
+        dialog.title(
+            "削除候補の確認"
         )
+
+        dialog.geometry(
+            "1000x600"
+        )
+
+        dialog.transient(
+            self.root
+        )
+
+        dialog.grab_set()
+
+        # -----------------------------------------------------
+        # Header
+        # -----------------------------------------------------
+
+        header = tk.Label(
+            dialog,
+            text=(
+                f"削除候補 : "
+                f"{len(delete_files)} 件\n\n"
+                "以下のファイルはKeepに指定されていません。"
+            ),
+            anchor="w",
+            justify="left"
+        )
+
+        header.pack(
+            fill="x",
+            padx=10,
+            pady=10
+        )
+
+        # -----------------------------------------------------
+        # List
+        # -----------------------------------------------------
+
+        frame = tk.Frame(
+            dialog
+        )
+
+        frame.pack(
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=(0, 10)
+        )
+
+        listbox = tk.Listbox(
+            frame
+        )
+
+        scrollbar = ttk.Scrollbar(
+            frame,
+            orient="vertical",
+            command=listbox.yview
+        )
+
+        listbox.configure(
+            yscrollcommand=scrollbar.set
+        )
+
+        listbox.pack(
+            side="left",
+            fill="both",
+            expand=True
+        )
+
+        scrollbar.pack(
+            side="right",
+            fill="y"
+        )
+
+        for path in delete_files:
+
+            listbox.insert(
+                "end",
+                path
+            )
+
+        # -----------------------------------------------------
+        # Close
+        # -----------------------------------------------------
+
+        close_button = tk.Button(
+            dialog,
+            text="閉じる",
+            command=dialog.destroy
+        )
+
+        close_button.pack(
+            fill="x",
+            padx=10,
+            pady=(0, 10)
+        )
+
+    # =========================================================
+    # Move to recycle bin
+    # =========================================================
 
     def move_delete_files(self):
 
-        delete_files = self.get_delete_files()
+        delete_files = (
+            self.get_delete_files()
+        )
 
         if not delete_files:
 
@@ -462,7 +852,8 @@ class ResultWindow:
         result = messagebox.askyesno(
             "ごみ箱へ移動",
             (
-                f"Keep以外の {len(delete_files)} 件を"
+                f"Keep以外の "
+                f"{len(delete_files)} 件を"
                 "Windowsのごみ箱へ移動します。\n\n"
                 "Keepに指定したファイルは移動しません。\n\n"
                 "実行しますか？"
@@ -472,42 +863,46 @@ class ResultWindow:
         if not result:
             return
 
-        success_count, failure_count, failed_files = (
-            self.delete_engine.move_files_to_trash(
+        (
+            success_count,
+            failure_count,
+            failed_files
+        ) = (
+            self.delete_engine
+            .move_files_to_trash(
                 delete_files
             )
         )
 
         message = (
-            f"ごみ箱への移動が完了しました。\n\n"
+            "ごみ箱への移動が完了しました。\n\n"
             f"成功 : {success_count} 件\n"
             f"失敗 : {failure_count} 件"
         )
 
         if failed_files:
 
-            message += "\n\n失敗したファイル:\n"
+            message += (
+                "\n\n失敗したファイル:\n"
+            )
 
-            for filepath in failed_files[:10]:
+            message += "\n".join(
+                failed_files[:10]
+            )
+
+            if len(
+                failed_files
+            ) > 10:
 
                 message += (
-                    f"{filepath}\n"
-                )
-
-            if len(failed_files) > 10:
-
-                message += (
-                    f"...ほか {len(failed_files) - 10} 件"
+                    f"\n...ほか "
+                    f"{len(failed_files) - 10} 件"
                 )
 
         messagebox.showinfo(
             "QPhotoCleaner",
             message
         )
-
-        #
-        # ごみ箱へ移動したファイルを一覧から除去
-        #
 
         if success_count > 0:
 
@@ -516,13 +911,19 @@ class ResultWindow:
                 failed_files
             )
 
+    # =========================================================
+    # Remove moved files
+    # =========================================================
+
     def remove_moved_files(
         self,
         delete_files,
         failed_files
     ):
 
-        failed_set = set(failed_files)
+        failed_set = set(
+            failed_files
+        )
 
         moved_paths = [
             path
@@ -542,6 +943,10 @@ class ResultWindow:
         self.load_duplicates(
             remaining_rows
         )
+
+    # =========================================================
+    # Run
+    # =========================================================
 
     def run(self):
 
