@@ -1,7 +1,7 @@
 """
 QPhotoCleaner
 GUI
-Version 1.5.0
+Version 2.0.0
 """
 
 import tkinter as tk
