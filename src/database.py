@@ -1,24 +1,72 @@
 """
 QPhotoCleaner
 SQLite Database
-Version 1.5.1
+Version 2.0.0
 """
 
+import os
 import sqlite3
 from pathlib import Path
 
 
-DB_FILE = Path("database/qphotocleaner.db")
+# ---------------------------------------------------------
+# データベース保存先
+# ---------------------------------------------------------
+# Windowsではユーザーごとのローカルデータ領域を使用する。
+# 例:
+# C:\Users\ユーザー名\AppData\Local\QPhotoCleaner\
+#
+# これにより、EXEをどこから起動しても同じ場所にDBを作成できる。
+# ---------------------------------------------------------
+
+if os.name == "nt":
+
+    local_app_data = os.environ.get("LOCALAPPDATA")
+
+    if local_app_data:
+        DB_DIR = (
+            Path(local_app_data)
+            / "QPhotoCleaner"
+        )
+    else:
+        DB_DIR = (
+            Path.home()
+            / "AppData"
+            / "Local"
+            / "QPhotoCleaner"
+        )
+
+else:
+
+    DB_DIR = (
+        Path.home()
+        / ".qphotocleaner"
+    )
+
+
+DB_FILE = DB_DIR / "qphotocleaner.db"
 
 
 class Database:
 
     def __init__(self):
 
-        DB_FILE.parent.mkdir(exist_ok=True)
+        # データベース保存フォルダを作成
+        DB_FILE.parent.mkdir(
+            parents=True,
+            exist_ok=True
+        )
 
-        self.conn = sqlite3.connect(DB_FILE)
+        # SQLite接続
+        # timeoutを設定し、一時的なロックに対して
+        # すぐにエラーにせず待機する。
+        self.conn = sqlite3.connect(
+            DB_FILE,
+            timeout=30
+        )
+
         self.conn.row_factory = sqlite3.Row
+
         self.cur = self.conn.cursor()
 
     def create(self):
