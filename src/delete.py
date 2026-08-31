@@ -1,7 +1,7 @@
 """
 QPhotoCleaner
 Delete Engine
-Version 1.3.3
+Version 2.0.0
 """
 
 from pathlib import Path
@@ -54,7 +54,11 @@ class DeleteEngine:
 
             return False
 
-    def move_files_to_trash(self, filepaths):
+    def move_files_to_trash(
+        self,
+        filepaths,
+        progress_callback=None
+    ):
         """
         複数ファイルをごみ箱へ移動する
 
@@ -62,6 +66,16 @@ class DeleteEngine:
         ----------
         filepaths : list
             ファイルパスのリスト
+
+        progress_callback : callable, optional
+            処理状況を通知するコールバック
+
+            callback(
+                processed,
+                total,
+                filepath,
+                success
+            )
 
         Returns
         -------
@@ -73,9 +87,18 @@ class DeleteEngine:
         failure_count = 0
         failed_files = []
 
-        for filepath in filepaths:
+        total = len(filepaths)
 
-            if self.move_to_trash(filepath):
+        for processed, filepath in enumerate(
+            filepaths,
+            start=1
+        ):
+
+            success = self.move_to_trash(
+                filepath
+            )
+
+            if success:
 
                 success_count += 1
 
@@ -83,6 +106,29 @@ class DeleteEngine:
 
                 failure_count += 1
                 failed_files.append(filepath)
+
+            # -------------------------------------------------
+            # GUIへ進捗を通知
+            # -------------------------------------------------
+
+            if progress_callback is not None:
+
+                try:
+
+                    progress_callback(
+                        processed,
+                        total,
+                        filepath,
+                        success
+                    )
+
+                except Exception as error:
+
+                    print(
+                        "進捗通知に失敗しました:"
+                    )
+
+                    print(error)
 
         return (
             success_count,

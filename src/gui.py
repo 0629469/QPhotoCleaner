@@ -6,6 +6,7 @@ Version 2.0.0
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+import threading
 
 from thumbnail import ThumbnailEngine
 from imageinfo import ImageInfo
@@ -21,6 +22,19 @@ class ResultWindow:
         self.rows = []
         self.keep_map = {}
 
+        # -----------------------------------------------------
+        # Delete progress
+        # -----------------------------------------------------
+
+        self.delete_progress_window = None
+        self.delete_progress_bar = None
+        self.delete_progress_status = None
+        self.delete_progress_filename = None
+        self.delete_progress_result = None
+
+        self.delete_success_count = 0
+        self.delete_failure_count = 0
+
         self.root = tk.Tk()
         self.root.title("QPhotoCleaner")
         self.root.geometry("1400x800")
@@ -32,7 +46,6 @@ class ResultWindow:
     # =========================================================
 
     def create_widgets(self):
-
         left = tk.Frame(self.root)
         right = tk.Frame(self.root)
 
@@ -332,9 +345,11 @@ class ResultWindow:
             if self.is_copy_name(
                 row["filename"]
             ):
+
                 copy_files.append(row)
 
             else:
+
                 normal_files.append(row)
 
         if normal_files:
@@ -459,6 +474,7 @@ class ResultWindow:
             if not self.tree.exists(
                 item_id
             ):
+
                 continue
 
             values = list(
@@ -518,9 +534,11 @@ class ResultWindow:
         )
 
         if not item:
+
             return
 
         if column != "#1":
+
             return
 
         index = self.get_row_index(
@@ -528,6 +546,7 @@ class ResultWindow:
         )
 
         if index is None:
+
             return
 
         self.set_keep(
@@ -552,6 +571,7 @@ class ResultWindow:
         )
 
         if not item:
+
             return
 
         index = self.get_row_index(
@@ -559,6 +579,7 @@ class ResultWindow:
         )
 
         if index is None:
+
             return
 
         self.set_keep(
@@ -581,6 +602,7 @@ class ResultWindow:
         if not item.startswith(
             "row_"
         ):
+
             return None
 
         try:
@@ -594,11 +616,13 @@ class ResultWindow:
             return None
 
         if index < 0:
+
             return None
 
         if index >= len(
             self.rows
         ):
+
             return None
 
         return index
@@ -615,6 +639,7 @@ class ResultWindow:
         selection = self.tree.selection()
 
         if not selection:
+
             return
 
         index = self.get_row_index(
@@ -622,6 +647,7 @@ class ResultWindow:
         )
 
         if index is None:
+
             return
 
         row = self.rows[index]
@@ -829,7 +855,6 @@ class ResultWindow:
             padx=10,
             pady=(0, 10)
         )
-
     # =========================================================
     # Move to recycle bin
     # =========================================================
@@ -854,24 +879,314 @@ class ResultWindow:
             (
                 f"Keep以外の "
                 f"{len(delete_files)} 件を"
-                "Windowsのごみ箱へ移動します。\n\n"
+                "ごみ箱へ移動します。\n\n"
                 "Keepに指定したファイルは移動しません。\n\n"
                 "実行しますか？"
             )
         )
 
         if not result:
+
             return
+
+        # -----------------------------------------------------
+        # Reset progress counters
+        # -----------------------------------------------------
+
+        self.delete_success_count = 0
+        self.delete_failure_count = 0
+
+        # -----------------------------------------------------
+        # Disable buttons while processing
+        # -----------------------------------------------------
+
+        self.delete_button.config(
+            state="disabled"
+        )
+
+        self.review_button.config(
+            state="disabled"
+        )
+
+        # -----------------------------------------------------
+        # Show progress window
+        # -----------------------------------------------------
+
+        self.show_delete_progress(
+            len(delete_files)
+        )
+
+        # -----------------------------------------------------
+        # Run delete operation in background thread
+        # -----------------------------------------------------
+
+        thread = threading.Thread(
+            target=self.delete_files_worker,
+            args=(delete_files,),
+            daemon=True
+        )
+
+        thread.start()
+
+    # =========================================================
+    # Delete progress window
+    # =========================================================
+
+    def show_delete_progress(
+        self,
+        total
+    ):
+
+        self.delete_progress_window = tk.Toplevel(
+            self.root
+        )
+
+        self.delete_progress_window.title(
+            "ごみ箱へ移動中"
+        )
+
+        self.delete_progress_window.geometry(
+            "650x250"
+        )
+
+        self.delete_progress_window.transient(
+            self.root
+        )
+
+        self.delete_progress_window.resizable(
+            False,
+            False
+        )
+
+        frame = tk.Frame(
+            self.delete_progress_window
+        )
+
+        frame.pack(
+            fill="both",
+            expand=True,
+            padx=20,
+            pady=20
+        )
+
+        # -----------------------------------------------------
+        # Status
+        # -----------------------------------------------------
+
+        self.delete_progress_status = tk.Label(
+            frame,
+            text=(
+                "ごみ箱へ移動しています...\n"
+                f"0 / {total} 件"
+            ),
+            anchor="w",
+            justify="left"
+        )
+
+        self.delete_progress_status.pack(
+            fill="x",
+            pady=(0, 10)
+        )
+
+        # -----------------------------------------------------
+        # Progress bar
+        # -----------------------------------------------------
+
+        self.delete_progress_bar = ttk.Progressbar(
+            frame,
+            orient="horizontal",
+            mode="determinate",
+            maximum=total
+        )
+
+        self.delete_progress_bar.pack(
+            fill="x",
+            pady=(0, 10)
+        )
+
+        # -----------------------------------------------------
+        # Current file
+        # -----------------------------------------------------
+
+        self.delete_progress_filename = tk.Label(
+            frame,
+            text="",
+            anchor="w",
+            justify="left"
+        )
+
+        self.delete_progress_filename.pack(
+            fill="x"
+        )
+
+        # -----------------------------------------------------
+        # Result count
+        # -----------------------------------------------------
+
+        self.delete_progress_result = tk.Label(
+            frame,
+            text="成功 : 0 件    失敗 : 0 件",
+            anchor="w",
+            justify="left"
+        )
+
+        self.delete_progress_result.pack(
+            fill="x",
+            pady=(10, 0)
+        )
+
+    # =========================================================
+    # Delete worker
+    # =========================================================
+
+    def delete_files_worker(
+        self,
+        delete_files
+    ):
+
+        def progress_callback(
+            processed,
+            total,
+            filepath,
+            success
+        ):
+
+            self.root.after(
+                0,
+                self.update_delete_progress,
+                processed,
+                total,
+                filepath,
+                success
+            )
+
+        try:
+
+            result = (
+                self.delete_engine
+                .move_files_to_trash(
+                    delete_files,
+                    progress_callback
+                )
+            )
+
+            self.root.after(
+                0,
+                self.delete_finished,
+                delete_files,
+                result
+            )
+
+        except Exception as error:
+
+            self.root.after(
+                0,
+                self.delete_failed,
+                str(error)
+            )
+
+    # =========================================================
+    # Update delete progress
+    # =========================================================
+
+    def update_delete_progress(
+        self,
+        processed,
+        total,
+        filepath,
+        success
+    ):
+
+        if (
+            self.delete_progress_window
+            is None
+        ):
+
+            return
+
+        if not self.delete_progress_window.winfo_exists():
+
+            return
+
+        self.delete_progress_bar["value"] = (
+            processed
+        )
+
+        self.delete_progress_status.config(
+            text=(
+                "ごみ箱へ移動しています...\n"
+                f"{processed} / {total} 件"
+            )
+        )
+
+        self.delete_progress_filename.config(
+            text=(
+                "処理済み:\n"
+                f"{filepath}"
+            )
+        )
+
+        if success:
+
+            self.delete_success_count += 1
+
+        else:
+
+            self.delete_failure_count += 1
+
+        self.delete_progress_result.config(
+            text=(
+                f"成功 : "
+                f"{self.delete_success_count} 件    "
+                f"失敗 : "
+                f"{self.delete_failure_count} 件"
+            )
+        )
+
+    # =========================================================
+    # Delete finished
+    # =========================================================
+
+    def delete_finished(
+        self,
+        delete_files,
+        result
+    ):
 
         (
             success_count,
             failure_count,
             failed_files
-        ) = (
-            self.delete_engine
-            .move_files_to_trash(
-                delete_files
-            )
+        ) = result
+
+        if (
+            self.delete_progress_window
+            is not None
+        ):
+
+            if self.delete_progress_window.winfo_exists():
+
+                self.delete_progress_window.destroy()
+
+        self.delete_progress_window = None
+        self.delete_progress_bar = None
+        self.delete_progress_status = None
+        self.delete_progress_filename = None
+        self.delete_progress_result = None
+
+        self.delete_success_count = 0
+        self.delete_failure_count = 0
+
+        # -----------------------------------------------------
+        # Re-enable buttons
+        # -----------------------------------------------------
+
+        self.delete_button.config(
+            state="normal"
+        )
+
+        self.review_button.config(
+            state="normal"
         )
 
         message = (
@@ -912,6 +1227,50 @@ class ResultWindow:
             )
 
     # =========================================================
+    # Delete failed
+    # =========================================================
+
+    def delete_failed(
+        self,
+        error
+    ):
+
+        if (
+            self.delete_progress_window
+            is not None
+        ):
+
+            if self.delete_progress_window.winfo_exists():
+
+                self.delete_progress_window.destroy()
+
+        self.delete_progress_window = None
+        self.delete_progress_bar = None
+        self.delete_progress_status = None
+        self.delete_progress_filename = None
+        self.delete_progress_result = None
+
+        self.delete_success_count = 0
+        self.delete_failure_count = 0
+
+        self.delete_button.config(
+            state="normal"
+        )
+
+        self.review_button.config(
+            state="normal"
+        )
+
+        messagebox.showerror(
+            "QPhotoCleaner",
+            (
+                "ごみ箱への移動中に"
+                "エラーが発生しました。\n\n"
+                f"{error}"
+            )
+        )
+
+    # =========================================================
     # Remove moved files
     # =========================================================
 
@@ -932,6 +1291,7 @@ class ResultWindow:
         ]
 
         if not moved_paths:
+
             return
 
         remaining_rows = [
